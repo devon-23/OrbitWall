@@ -1,11 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orbitr</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrbitWall — closest satellites</title>
+<style>
+  body {
+    background: #0b0d12;
+    color: #eee;
+    font-family: system-ui, sans-serif;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 32px 20px;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.sub { color: #888; font-size: 13px; margin-top: 0; }
+  form { display: flex; gap: 8px; margin: 20px 0; }
+  input {
+    background: #171a20;
+    border: 1px solid #2a2e37;
+    color: #eee;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: 100%;
+    font-size: 14px;
+  }
+  button {
+    background: #5fe1c9;
+    color: #0b0d12;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  button:hover { opacity: 0.9; }
+  #geoBtn {
+    background: none;
+    border: 1px solid #2a2e37;
+    color: #ccc;
+    margin-bottom: 16px;
+  }
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #22262f; font-size: 13.5px; }
+  th { color: #888; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  td.name { font-weight: 600; }
+  #status { color: #888; font-size: 13px; margin-top: 12px; }
+</style>
 </head>
 <body>
-    
+
+  <h1>OrbitWall</h1>
+  <p class="sub">Top 5 satellites closest to your location right now.</p>
+
+  <button id="geoBtn" type="button">Use my current location</button>
+
+  <form id="locForm">
+    <input id="lat" type="number" step="any" placeholder="Latitude" required>
+    <input id="lon" type="number" step="any" placeholder="Longitude" required>
+    <button type="submit">Go</button>
+  </form>
+
+  <div id="status"></div>
+
+  <table id="resultsTable" hidden>
+    <thead>
+      <tr>
+        <th>Satellite</th>
+        <th>Range</th>
+        <th>Elevation</th>
+        <th>Altitude</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+
+<script>
+  const latInput = document.getElementById('lat');
+  const lonInput = document.getElementById('lon');
+  const statusEl = document.getElementById('status');
+  const table = document.getElementById('resultsTable');
+  const tbody = document.getElementById('resultsBody');
+
+  document.getElementById('geoBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      statusEl.textContent = 'Geolocation is not supported by this browser.';
+      return;
+    }
+    statusEl.textContent = 'Locating…';
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        latInput.value = pos.coords.latitude.toFixed(4);
+        lonInput.value = pos.coords.longitude.toFixed(4);
+        fetchClosest(pos.coords.latitude, pos.coords.longitude);
+      },
+      () => { statusEl.textContent = 'Could not get your location — enter it manually below.'; }
+    );
+  });
+
+  document.getElementById('locForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    fetchClosest(parseFloat(latInput.value), parseFloat(lonInput.value));
+  });
+
+  async function fetchClosest(lat, lon) {
+    statusEl.textContent = 'Looking up nearby satellites…';
+    table.hidden = true;
+    try {
+      const res = await fetch(`/api/closest?lat=${lat}&lon=${lon}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+
+      tbody.innerHTML = data.satellites.map((s) => `
+        <tr>
+          <td class="name">${s.name}</td>
+          <td>${s.rangeKm.toLocaleString()} km</td>
+          <td>${s.elevationDeg}°</td>
+          <td>${s.altitudeKm.toLocaleString()} km</td>
+        </tr>
+      `).join('');
+
+      table.hidden = false;
+      statusEl.textContent = '';
+    } catch (err) {
+      statusEl.textContent = 'Something went wrong: ' + err.message;
+    }
+  }
+</script>
 </body>
 </html>
