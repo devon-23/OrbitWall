@@ -3,131 +3,254 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OrbitWall — closest satellites</title>
+<title>OrbitWall</title>
 <style>
+  :root {
+    --bg: #04050a;
+    --panel: #0d1020;
+    --border: #1e2440;
+    --text: #e8eaf6;
+    --muted: #7f88a8;
+    --accent: #6ee7ff;
+    --gold: #ffbe58;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    background: #0b0d12;
-    color: #eee;
-    font-family: system-ui, sans-serif;
-    max-width: 480px;
-    margin: 0 auto;
-    padding: 32px 20px;
+    background:
+      radial-gradient(1100px 600px at 15% -10%, #16224a 0%, transparent 60%),
+      radial-gradient(900px 500px at 90% 0%, #2a1442 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    margin: 0;
+    padding: 0 20px 70px;
+    min-height: 100%;
   }
-  h1 { font-size: 20px; margin-bottom: 4px; }
-  p.sub { color: #888; font-size: 13px; margin-top: 0; }
-  form { display: flex; gap: 8px; margin: 20px 0; }
-  input {
-    background: #171a20;
-    border: 1px solid #2a2e37;
-    color: #eee;
-    padding: 8px 10px;
-    border-radius: 6px;
-    width: 100%;
-    font-size: 14px;
+  #stars {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
   }
-  button {
-    background: #5fe1c9;
-    color: #0b0d12;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 6px;
+  .wrap { max-width: 1120px; margin: 0 auto; padding-top: 44px; }
+
+  header { margin-bottom: 26px; }
+  h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+    letter-spacing: 0.22em;
     font-weight: 600;
+    background: linear-gradient(90deg, #fff 0%, var(--accent) 60%, #b088ff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  p.sub { color: var(--muted); font-size: 13px; margin: 0; line-height: 1.6; }
+
+  .bezel {
+    background: #05060a;
+    border: 12px solid #14182a;
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow:
+      0 0 0 1px #262c48,
+      0 24px 70px rgba(0, 0, 0, 0.75),
+      0 0 90px rgba(110, 231, 255, 0.07);
+  }
+  canvas#matrix {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+  }
+
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 12px;
+    letter-spacing: 0.08em;
+    flex-wrap: wrap;
+  }
+
+  .controls { display: grid; gap: 18px; margin-top: 30px; }
+  @media (min-width: 860px) { .controls { grid-template-columns: 1.35fr 1fr; } }
+
+  .card {
+    background: rgba(13, 16, 32, 0.72);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    backdrop-filter: blur(4px);
+  }
+  .card h2 {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+
+  .segs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .seg {
+    flex: 1;
+    min-width: 128px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 10px 12px;
     cursor: pointer;
-    font-size: 14px;
-    white-space: nowrap;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.35;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
-  button:hover { opacity: 0.9; }
-  #geoBtn {
+  .seg b { display: block; color: var(--text); font-weight: 600; font-size: 13px; }
+  .seg small { font-size: 10.5px; opacity: 0.8; letter-spacing: 0.02em; }
+  .seg:hover { border-color: #34406c; }
+  .seg.on {
+    border-color: var(--accent);
+    background: rgba(110, 231, 255, 0.09);
+    color: var(--accent);
+  }
+  .seg.on b { color: var(--accent); }
+
+  form { display: flex; gap: 8px; flex-wrap: wrap; }
+  input {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 11px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-family: inherit;
+    flex: 1;
+    min-width: 110px;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  button.go {
+    background: var(--accent);
+    color: #04050a;
+    border: none;
+    padding: 9px 18px;
+    border-radius: 7px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.ghost {
     background: none;
-    border: 1px solid #2a2e37;
-    color: #ccc;
-    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 7px;
+    padding: 9px 14px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
   }
-  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #22262f; font-size: 13.5px; }
-  th { color: #888; font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-  td.name { font-weight: 600; }
-  #status { color: #888; font-size: 13px; margin-top: 12px; }
+  button.ghost:hover { border-color: #34406c; color: var(--text); }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  #status { color: var(--muted); font-size: 12px; min-height: 18px; margin-top: 14px; line-height: 1.5; }
+
+  ul#roster { list-style: none; margin: 0; padding: 0; font-size: 12px; }
+  ul#roster li {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 5px 7px;
+    border-radius: 5px;
+    color: var(--muted);
+  }
+  ul#roster li.on { background: rgba(110, 231, 255, 0.10); color: var(--text); }
+  ul#roster .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  ul#roster .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  ul#roster .rg { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  footer { color: var(--muted); font-size: 11.5px; margin-top: 26px; line-height: 1.7; }
+  footer b { color: var(--gold); font-weight: 600; }
 </style>
 </head>
 <body>
+<canvas id="stars"></canvas>
 
-  <h1>OrbitWall</h1>
-  <p class="sub">Top 5 satellites closest to your location right now.</p>
+<div class="wrap">
+  <header>
+    <h1>ORBITWALL</h1>
+    <p class="sub">A live simulation of the LED panel — every lit pixel here is a pixel on the wall.</p>
+  </header>
 
-  <button id="geoBtn" type="button">Use my current location</button>
+  <div class="bezel">
+    <canvas id="matrix" width="1024" height="512"></canvas>
+  </div>
+  <div class="meta">
+    <span id="geom">128x64 HUB75</span>
+    <span id="count">—</span>
+    <span id="clock">--:--:--</span>
+  </div>
 
-  <form id="locForm">
-    <input id="lat" type="number" step="any" placeholder="Latitude" required>
-    <input id="lon" type="number" step="any" placeholder="Longitude" required>
-    <button type="submit">Go</button>
-  </form>
+  <div class="controls">
+    <div class="card">
+      <h2>What to track</h2>
+      <div class="segs">
+        <button class="seg" data-mode="iss" type="button">
+          <b>ISS only</b>
+          <small>The station, its position and the next flyby</small>
+        </button>
+        <button class="seg" data-mode="notable" type="button">
+          <b>Notable</b>
+          <small>Stations, Hubble, weather and nav birds</small>
+        </button>
+        <button class="seg" data-mode="all" type="button">
+          <b>Everything</b>
+          <small>All ~16,000 tracked objects overhead</small>
+        </button>
+      </div>
 
-  <div id="status"></div>
+      <h2 style="margin-top:20px">Panel size</h2>
+      <div class="segs">
+        <button class="seg" data-size="wide" type="button">
+          <b>128 &times; 64</b>
+          <small>21 characters — fits without scrolling</small>
+        </button>
+        <button class="seg" data-size="compact" type="button">
+          <b>64 &times; 32</b>
+          <small>10 characters — text has to scroll</small>
+        </button>
+      </div>
 
-  <table id="resultsTable" hidden>
-    <thead>
-      <tr>
-        <th>Satellite</th>
-        <th>Range</th>
-        <th>Elevation</th>
-        <th>Altitude</th>
-      </tr>
-    </thead>
-    <tbody id="resultsBody"></tbody>
-  </table>
+      <h2 style="margin-top:20px">Location</h2>
+      <form id="locForm">
+        <input id="lat" type="number" step="any" placeholder="Latitude" required>
+        <input id="lon" type="number" step="any" placeholder="Longitude" required>
+        <button class="go" type="submit">Track</button>
+      </form>
+      <div class="row">
+        <button class="ghost" id="geoBtn" type="button">Use my location</button>
+      </div>
+      <div id="status"></div>
+    </div>
 
-<script>
-  const latInput = document.getElementById('lat');
-  const lonInput = document.getElementById('lon');
-  const statusEl = document.getElementById('status');
-  const table = document.getElementById('resultsTable');
-  const tbody = document.getElementById('resultsBody');
+    <div class="card">
+      <h2>In view now</h2>
+      <ul id="roster"></ul>
+    </div>
+  </div>
 
-  document.getElementById('geoBtn').addEventListener('click', () => {
-    if (!navigator.geolocation) {
-      statusEl.textContent = 'Geolocation is not supported by this browser.';
-      return;
-    }
-    statusEl.textContent = 'Locating…';
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        latInput.value = pos.coords.latitude.toFixed(4);
-        lonInput.value = pos.coords.longitude.toFixed(4);
-        fetchClosest(pos.coords.latitude, pos.coords.longitude);
-      },
-      () => { statusEl.textContent = 'Could not get your location — enter it manually below.'; }
-    );
-  });
+  <footer>
+    Ranked by straight-line distance, so the nearest object may still be
+    <b>below your horizon</b> — the board says so when it is. Orbital elements
+    come from CelesTrak and refresh hourly.
+  </footer>
+</div>
 
-  document.getElementById('locForm').addEventListener('submit', (e) => {
-    e.preventDefault();
-    fetchClosest(parseFloat(latInput.value), parseFloat(lonInput.value));
-  });
-
-  async function fetchClosest(lat, lon) {
-    statusEl.textContent = 'Looking up nearby satellites…';
-    table.hidden = true;
-    try {
-      const res = await fetch(`/api/closest?lat=${lat}&lon=${lon}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Request failed');
-
-      tbody.innerHTML = data.satellites.map((s) => `
-        <tr>
-          <td class="name">${s.name}</td>
-          <td>${s.rangeKm.toLocaleString()} km</td>
-          <td>${s.elevationDeg}°</td>
-          <td>${s.altitudeKm.toLocaleString()} km</td>
-        </tr>
-      `).join('');
-
-      table.hidden = false;
-      statusEl.textContent = '';
-    } catch (err) {
-      statusEl.textContent = 'Something went wrong: ' + err.message;
-    }
-  }
-</script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

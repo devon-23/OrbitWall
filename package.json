@@ -3,8 +3,13 @@
   "version": "1.0.0",
   "description": "Bare-bones nearest-satellites lookup",
   "main": "server/server.js",
-  "scripts": { "start": "node server/server.js" },
-  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "satellite.js": "^5.0.0"

@@ -1,0 +1,7 @@
+node_modules/
+firmware/**/secrets.h
+.pio/
+build/
+*.hex
+.DS_Store
+.tle-cache/
