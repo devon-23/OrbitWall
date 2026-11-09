@@ -21,7 +21,13 @@ const PROFILES = [
       'Laps Earth in 92 min',
       '16 sunrises per day',
       'Cost ~$150 billion',
-      'Brightest star-like'
+      'Brightest star-like',
+      'Flies 400km up',
+      'Smells like hot metal',
+      'Has a bay-window dome',
+      'Dodges debris yearly',
+      'Zero-g, not zero mass',
+      'Four labs joined up'
     ]
   },
   {
@@ -35,7 +41,12 @@ const PROFILES = [
       'China\'s space station',
       'Core module flew 2021',
       'T-shaped, 3 modules',
-      'Crew of three aboard'
+      'Crew of three aboard',
+      'Launched 2021-2022',
+      'Smaller than the ISS',
+      'Has a robot arm',
+      'Shenzhou ferries crew',
+      'Has its own lab racks'
     ]
   },
   {
@@ -50,7 +61,12 @@ const PROFILES = [
       '2.4m primary mirror',
       'Crew fixed it 5 times',
       'Looks 13 billion yrs',
-      'Blurry until 1993 fix'
+      'Blurry until 1993 fix',
+      'No air to blur views',
+      'Flies 540km high',
+      'Orbits every 95 min',
+      'Named after E. Hubble',
+      'Still working at 35'
     ]
   },
   {
@@ -64,7 +80,11 @@ const PROFILES = [
       'Sees in X-ray light',
       'Hunts black holes',
       'Sees what eyes cannot',
-      'Catches gamma bursts'
+      'Catches gamma bursts',
+      'Mirrors polished thin',
+      'Sees 1M-degree gas',
+      'Shuttle put it up',
+      'Apogee 1/3 to Moon'
     ]
   },
   {
@@ -79,7 +99,12 @@ const PROFILES = [
       'Flies about 550km up',
       'Beams internet down',
       'Deorbits in ~5 years',
-      'Flies 20+ per launch'
+      'Flies 20+ per launch',
+      'Looks like a train',
+      'Laser links in space',
+      'Annoys astronomers',
+      'Flat as a table top',
+      'Krypton ion thruster'
     ]
   },
   {
@@ -92,7 +117,10 @@ const PROFILES = [
     facts: [
       'Broadband from 1200km',
       'Rival to Starlink',
-      'About 650 in orbit'
+      'About 650 in orbit',
+      'Flies polar orbits',
+      'Serves ships + planes',
+      'Went bankrupt in 2020'
     ]
   },
   {
@@ -105,7 +133,11 @@ const PROFILES = [
     facts: [
       'Sat-phone network',
       'Famous bright flares',
-      'Covers whole planet'
+      'Covers whole planet',
+      '66 active satellites',
+      'Talks sat-to-sat',
+      'Powers SOS messaging',
+      'Second-gen since 2017'
     ]
   },
   {
@@ -119,7 +151,12 @@ const PROFILES = [
       'Your phone maps you',
       'Has an atomic clock',
       'Orbits 20200km up',
-      'Relativity bends time'
+      'Relativity bends time',
+      '31 sats in 6 planes',
+      'Twelve-hour orbits',
+      'Clock drifts 38us/day',
+      'Needs 4 for a fix',
+      'Free for the world'
     ]
   },
   {
@@ -133,7 +170,11 @@ const PROFILES = [
       'Shoots the forecast',
       'Spots hurricanes',
       'Images Earth /10min',
-      'Feeds weather apps'
+      'Feeds weather apps',
+      'GOES hangs motionless',
+      'Sees storms forming',
+      'Polar birds fly 800km',
+      'Measures sea surface'
     ]
   },
   {
@@ -147,7 +188,11 @@ const PROFILES = [
       'Photographs Earth',
       'Tracks ice + forests',
       'Measures sea level',
-      'Sees in infrared too'
+      'Sees in infrared too',
+      'Landsat since 1972',
+      'Maps crops from space',
+      'Watches glaciers melt',
+      'Sun-synchronous orbit'
     ]
   },
   {
@@ -162,7 +207,11 @@ const PROFILES = [
       '30000+ tracked bits',
       'Moves at 7.8 km/s',
       'Nobody is flying this',
-      'Will burn up someday'
+      'Will burn up someday',
+      'Faster than a bullet',
+      'Nobody can steer it',
+      'Stays up for decades',
+      'Why we track the sky'
     ]
   },
   {
@@ -175,7 +224,11 @@ const PROFILES = [
     facts: [
       'Fits in a shoebox',
       'Built by students',
-      '10cm cube, 1.3kg'
+      '10cm cube, 1.3kg',
+      'Rides along as cargo',
+      'Often 3 units long',
+      'Dies in a year or two',
+      'Cheap way to orbit'
     ]
   },
   {
@@ -188,7 +241,10 @@ const PROFILES = [
     facts: [
       'Purpose not published',
       'Tracked by hobbyists',
-      'Orbit is public'
+      'Orbit is public',
+      'Hobbyists find it',
+      'Its orbit says a lot',
+      'Launched without fuss'
     ]
   }
 ];
@@ -203,7 +259,11 @@ const DEFAULT_PROFILE = {
     'One of 30000+ tracked',
     'Falls around Earth',
     'Orbits at ~7.7 km/s',
-    'Sunlit, looks starry'
+    'Sunlit, looks starry',
+    'Probably a smallsat',
+    'Going 17000 mph',
+    'Nobody named it well',
+    'Just doing its job'
   ]
 };
 
@@ -212,7 +272,16 @@ const DEFAULT_PROFILE = {
 const UNIVERSAL_FACTS = [
   'Orbit decays daily',
   'Falling, not floating',
-  'Circles Earth 15x/day'
+  'Circles Earth 15x/day',
+  'No engine needed',
+  'Sunrise every 90 min',
+  'Air drag still pulls',
+  'Best seen after dusk',
+  'Reflects sunlight',
+  'Never actually stops',
+  'Moves 10x a bullet',
+  'Weighs tons up there',
+  'Crossing the sky now'
 ];
 
 function profileFor(name) {
@@ -224,9 +293,14 @@ function profileFor(name) {
 
 // A stable rotating fact: same satellite always cycles the same order, and
 // `spin` advances it so the panel can change the line over time.
-function factFor(name, spin = 0) {
+//
+// `extraFacts` is for lines that can only be known at runtime -- the live
+// station crew, for instance -- which cannot live in the static table above.
+// They are spliced in before the universal facts so a crewed station rotates
+// through its own people before falling back to generic orbital trivia.
+function factFor(name, spin = 0, extraFacts = []) {
   const profile = profileFor(name);
-  const pool = profile.facts.concat(UNIVERSAL_FACTS);
+  const pool = profile.facts.concat(extraFacts, UNIVERSAL_FACTS);
   return pool[Math.abs(spin) % pool.length];
 }
 

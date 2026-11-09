@@ -66,8 +66,14 @@ const MODE_GROUPS = {
   // ("weather" already contains the NOAA and GOES satellites.)
   notable: ['stations', 'visual', 'science', 'weather', 'goes', 'gps-ops', 'galileo'],
 
-  // Everything CelesTrak lists as on-orbit and active (~11k objects).
-  all: ['active']
+  // Everything CelesTrak lists as on-orbit and active (~16k objects).
+  all: ['active'],
+
+  // Same catalogue as "all", but the server locks onto a single object
+  // instead of listing six -- see stickyClosest() in server.js. It needs the
+  // full catalogue because the genuinely closest thing overhead is usually
+  // an anonymous rocket body, not one of the notable birds.
+  overhead: ['active']
 };
 
 const DEFAULT_MODE = 'notable';

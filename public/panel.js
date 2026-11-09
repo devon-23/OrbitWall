@@ -104,6 +104,34 @@ function compass(az) {
   return points[Math.round(az / 45) % 8];
 }
 
+// A telemetry row split two ways: `left` against the left margin, `right`
+// flush to the right edge. Right-aligning the second field keeps its digits
+// in a fixed column, so a value going from 999 to 1000 km no longer shoves
+// the label sideways — on a glanceable board that wobble is the whole
+// problem. The left field is truncated (never the right) when a long value
+// squeezes the row, and a one-character gutter keeps them from touching.
+function statRow(panel, y, left, right, box, color = COLORS.stat) {
+  const rightX = box.x1 - textWidth(right) + 1;
+  const leftMax = rightX - CHAR_W - box.x0;
+  if (leftMax > 0) panel.text(box.x0, y, fit(left, leftMax), color, box);
+  panel.text(rightX, y, right, color, box);
+}
+
+// What the bottom line shows this tick. The rotation is the fun fact, then
+// the next pass when one is known, then what kind of object this is. Only
+// the headline satellite carries a pass, so the others cycle through two.
+function thirdLine(sat, state) {
+  const stops = [{ text: sat.fact || '', color: COLORS.fact }];
+  if (sat.pass !== undefined) {
+    stops.push({
+      text: `Next pass ${formatCountdown(sat.pass, state.nowMs)}`,
+      color: COLORS.fact
+    });
+  }
+  if (sat.kind) stops.push({ text: sat.kind, color: sat.color || COLORS.kind });
+  return stops[Math.abs(state.thirdIndex || 0) % stops.length];
+}
+
 // The wide 128x64 board: emblem block, three identity lines beside it, a
 // divider, then full-width telemetry and a rotating fact.
 function renderWide(panel, sat, state) {
@@ -114,28 +142,49 @@ function renderWide(panel, sat, state) {
   const colX = emblemX + EMBLEM_SIZE + 3; // 29
   const colBox = { x0: colX, y0: 0, x1: panel.cols - 2, y1: 27 };
 
-  panel.text(colX, 2, fit(sat.label, colBox.x1 - colBox.x0), COLORS.label, colBox);
-  panel.text(colX, 11, fit(sat.operator, colBox.x1 - colBox.x0), COLORS.operator, colBox);
-  panel.text(colX, 20, fit(sat.kind, colBox.x1 - colBox.x0), sat.color || COLORS.kind, colBox);
+  // Identity block, most specific first: the catalogue name, then the short
+  // friendly label, then who flies it. `kind` used to sit on the third row
+  // and now rides the rotating line at the bottom instead.
+  //
+  // The slots keep their own colours, so the type colour still appears in
+  // this block -- it just lands on the operator now.
+  const identWidth = colBox.x1 - colBox.x0;
+
+  // The name is the one identity row that regularly overflows: 16 characters
+  // fit, and about 9.5% of the active catalogue is longer. It marquees only
+  // when it has to, so the 90% that fit stay perfectly still. The box clips
+  // at colX so a scrolling name can never bleed over the emblem.
+  const nameBox = { x0: colX, y0: 0, x1: panel.cols - 2, y1: 9 };
+  panel.scrollText(colX, 2, sat.name || '', COLORS.label, nameBox,
+    state.nameScrollOffset || 0);
+
+  // Label and operator are short by construction -- check.mjs fails the
+  // build if either overflows -- so they are only ever truncated.
+  panel.text(colX, 11, fit(sat.label, identWidth), COLORS.operator, colBox);
+  panel.text(colX, 20, fit(sat.operator, identWidth), sat.color || COLORS.kind, colBox);
 
   // Divider between the identity block and the telemetry block.
   panel.hline(29, COLORS.divider);
 
   const wideBox = { x0: 1, y0: 31, x1: panel.cols - 2, y1: 56 };
-  const line1 = `Alt:${sat.altitudeKm}km Spd:${formatSpeed(sat.speedKmh)}`;
-  const line2 = sat.elevationDeg >= 0
-    ? `El:${Math.round(sat.elevationDeg)}° Az:${sat.azimuthDeg}° ${compass(sat.azimuthDeg)}`
-    : `Below horizon  ${formatRange(sat.rangeKm)}`;
 
-  panel.text(1, 31, fit(line1, panel.cols - 2), COLORS.stat, wideBox);
-  panel.text(1, 40, fit(line2, panel.cols - 2), COLORS.stat, wideBox);
+  // Altitude and elevation sit left; speed and azimuth are right-aligned.
+  statRow(panel, 31, `Alt:${sat.altitudeKm}km`, `Spd:${formatSpeed(sat.speedKmh)}`, wideBox);
 
-  // Third line alternates between the next pass and a fact, so the board
-  // always has something changing without anything sliding around.
-  const third = state.showPass && sat.pass !== undefined
-    ? `Next pass ${formatCountdown(sat.pass, state.nowMs)}`
-    : sat.fact;
-  panel.text(1, 49, fit(third || '', panel.cols - 2), COLORS.fact, wideBox);
+  if (sat.elevationDeg >= 0) {
+    statRow(panel, 40, `El:${Math.round(sat.elevationDeg)}°`,
+      `Az:${sat.azimuthDeg}° ${compass(sat.azimuthDeg)}`, wideBox);
+  } else {
+    // Below the horizon there is no useful look angle, so the row falls back
+    // to the range — still right-aligned, so the number holds its column.
+    statRow(panel, 40, 'Below horizon', formatRange(sat.rangeKm), wideBox);
+  }
+
+  // The bottom line cycles so the board always has something changing
+  // without anything sliding around. `kind` is one of the stops now that it
+  // no longer has a row of its own, and it keeps the type colour.
+  const slot = thirdLine(sat, state);
+  panel.text(1, 49, fit(slot.text, panel.cols - 2), slot.color, wideBox);
 
   drawSkyStrip(panel, sat, 58, panel.rows - 1);
 }
@@ -183,8 +232,11 @@ function renderCompact(panel, sat, state) {
     : formatRange(sat.rangeKm);
   panel.text(1, 16, fit(stat, panel.cols - 2), COLORS.stat, statBox);
 
+  // 10 characters cannot hold a name, so the compact board keeps showing the
+  // label and the kind, and only its bottom line follows the rotation.
   const factBox = { x0: 0, y0: 24, x1: panel.cols - 1, y1: 31 };
-  const third = state.showPass && sat.pass !== undefined
+  const showPass = Math.abs(state.thirdIndex || 0) % 2 === 1;
+  const third = showPass && sat.pass !== undefined
     ? `Pass ${formatCountdown(sat.pass, state.nowMs)}`
     : sat.fact || '';
   panel.scrollText(0, 24, third, COLORS.fact, factBox, state.scrollOffset);

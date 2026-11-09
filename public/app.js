@@ -5,6 +5,7 @@
 // onto a canvas with a bit of LED bloom.
 
 import { Panel, renderCard, renderMessage, formatCountdown } from './panel.js';
+import { textWidth, CHAR_W } from './font.js';
 import { assertEmblems } from './emblems.js';
 
 const SIZES = {
@@ -33,7 +34,7 @@ let mode = 'notable';
 
 let sats = [];
 let satIndex = 0;
-let showPass = false;
+let thirdIndex = 0; // which stop the bottom line is on
 let scrollOffset = 0;
 let message = 'Loading';
 let totalTracked = 0;
@@ -78,6 +79,7 @@ function applyMode(next) {
   markMode(next);
   sats = [];
   satIndex = 0;
+  lastSatSwitch = performance.now(); // restart the name marquee from the left
   message = 'Loading';
   renderRoster();
   fetchSatellites();
@@ -113,6 +115,18 @@ function paint() {
   }
 }
 
+// How far the name marquee has travelled. Paced to the dwell rather than to
+// a fixed pixel rate: a 24-character name is a 155px loop, which at the
+// 140ms/px used elsewhere would take 21.7s -- three and a half times the 6s
+// a card is on screen, so the end of a long name would never be seen. Tying
+// it to the dwell means every name completes exactly one loop, whatever its
+// length, and short names never move at all.
+function nameScrollOffset(sat, now) {
+  if (!sat || !sat.name) return 0;
+  const span = textWidth(sat.name) + CHAR_W * 2;
+  return Math.round(((now - lastSatSwitch) / SAT_DWELL_MS) * span);
+}
+
 function tick(now) {
   if (sats.length > 1 && now - lastSatSwitch >= SAT_DWELL_MS) {
     satIndex = (satIndex + 1) % sats.length;
@@ -122,7 +136,7 @@ function tick(now) {
   }
 
   if (now - lastThirdSwitch >= THIRD_LINE_MS) {
-    showPass = !showPass;
+    thirdIndex++;
     lastThirdSwitch = now;
   }
 
@@ -132,7 +146,15 @@ function tick(now) {
   }
 
   if (sats.length === 0) renderMessage(panel, message);
-  else renderCard(panel, sats[satIndex], { showPass, nowMs: Date.now(), scrollOffset });
+  else {
+    const sat = sats[satIndex];
+    renderCard(panel, sat, {
+      thirdIndex,
+      nowMs: Date.now(),
+      scrollOffset,
+      nameScrollOffset: nameScrollOffset(sat, now)
+    });
+  }
 
   paint();
   requestAnimationFrame(tick);
@@ -148,13 +170,59 @@ function renderRoster() {
       <i class="dot" style="background: rgb(${s.color.join(',')})"></i>
       <span class="nm">${escapeHtml(s.name)}</span>
       <span class="rg">${s.rangeKm} km</span>
-    </li>`).join('');
+    </li>`).join('') + crewMarkup();
+}
+
+// The station crew, listed in full under the roster. The panel only has room
+// for one abbreviated name at a time, so the page shows who they all are.
+function crewMarkup() {
+  const aboard = sats.find((x) => Array.isArray(x.crew) && x.crew.length > 0);
+  if (!aboard) return '';
+  return `<li class="crew">
+    <span class="nm">Aboard ${escapeHtml(aboard.label)}: ${aboard.crew.map(escapeHtml).join(', ')}</span>
+  </li>`;
 }
 
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
+}
+
+// "held 4m12s" for the overhead lock. Counts up from when the server last
+// switched objects, so it keeps ticking between polls.
+function formatHeld(sinceMs, nowMs = Date.now()) {
+  const s = Math.max(0, Math.round((nowMs - sinceMs) / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m${String(s % 60).padStart(2, '0')}s`;
+  return `${s}s`;
+}
+
+// The line under the controls. Called on every poll and once a second, so the
+// overhead lock timer advances without waiting for a refetch.
+function updateStatus() {
+  if (sats.length === 0) return;
+  const top = sats[0];
+  const { lat, lon } = location_;
+  const total = totalTracked.toLocaleString();
+
+  if (mode === 'iss') {
+    statusEl.textContent =
+      `ISS is ${top.rangeKm.toLocaleString()} km away — next pass ${formatCountdown(top.pass)}.`;
+    return;
+  }
+
+  if (mode === 'overhead') {
+    const held = top.heldSinceMs ? `, held ${formatHeld(top.heldSinceMs)}` : '';
+    statusEl.textContent =
+      `Locked on ${top.name} — ${top.rangeKm.toLocaleString()} km${held}. ` +
+      `Closest of ${total} objects; it stays until something else gets nearer.`;
+    return;
+  }
+
+  statusEl.textContent = `Nearest of ${total} objects over ${lat.toFixed(2)}, ${lon.toFixed(2)}.`;
 }
 
 async function fetchSatellites() {
@@ -172,11 +240,8 @@ async function fetchSatellites() {
       message = 'No data';
       statusEl.textContent = 'No satellites returned for this mode.';
     } else {
-      const top = sats[0];
       countEl.textContent = `${totalTracked.toLocaleString()} tracked`;
-      statusEl.textContent = mode === 'iss'
-        ? `ISS is ${top.rangeKm.toLocaleString()} km away — next pass ${formatCountdown(top.pass)}.`
-        : `Nearest of ${totalTracked.toLocaleString()} objects over ${lat.toFixed(2)}, ${lon.toFixed(2)}.`;
+      updateStatus();
     }
     renderRoster();
   } catch (err) {
@@ -233,6 +298,7 @@ for (const btn of document.querySelectorAll('[data-size]')) {
 
 setInterval(() => {
   clockEl.textContent = new Date().toLocaleTimeString('en-US', { hour12: false });
+  if (mode === 'overhead') updateStatus();
 }, 1000);
 
 // Slow drifting starfield behind the page, drawn once per resize.

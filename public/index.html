@@ -173,6 +173,11 @@
   ul#roster .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   ul#roster .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   ul#roster .rg { color: var(--muted); font-variant-numeric: tabular-nums; }
+  ul#roster li.crew {
+    display: block; color: var(--muted); font-size: 11px; line-height: 1.5;
+    border-top: 1px solid rgba(255, 255, 255, 0.07); margin-top: 6px; padding-top: 8px;
+  }
+  ul#roster li.crew .nm { white-space: normal; }
 
   footer { color: var(--muted); font-size: 11.5px; margin-top: 26px; line-height: 1.7; }
   footer b { color: var(--gold); font-weight: 600; }
@@ -211,6 +216,10 @@
         <button class="seg" data-mode="all" type="button">
           <b>Everything</b>
           <small>All ~16,000 tracked objects overhead</small>
+        </button>
+        <button class="seg" data-mode="overhead" type="button">
+          <b>Overhead</b>
+          <small>Locks onto the single closest object and holds it</small>
         </button>
       </div>
 

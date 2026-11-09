@@ -5,6 +5,7 @@ const { getSatellites, normalizeMode, DEFAULT_MODE } = require('./tle');
 const { classify, colorFor } = require('./satType');
 const { profileFor, factFor } = require('./facts');
 const { nextPass } = require('./passes');
+const { refreshCrew, crewFactsFor, crewNamesFor } = require('./crew');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,47 @@ const solutionCache = new Map();
 // minutes, so it gets its own longer-lived cache keyed by satellite.
 const PASS_TTL_MS = 60000;
 const passCache = new Map();
+
+// "overhead" mode holds one object on screen until something genuinely
+// overtakes it. A pure "whatever is closest this second" rule flaps: two
+// objects a few km apart trade places on consecutive polls and the board
+// strobes between them. So a challenger has to beat the held object by this
+// margin before it takes over.
+const STICKY_MARGIN_KM = 25;
+
+// location key -> { noradId, sinceMs }
+const stickyPicks = new Map();
+
+// Picks what "overhead" should show: the held object, unless a challenger is
+// closer by more than STICKY_MARGIN_KM, or the held object has dropped out of
+// the catalogue entirely. Returns the chosen entry and when the lock started.
+function stickyClosest(key, results) {
+  const leader = results[0];
+  const held = stickyPicks.get(key);
+  const current = held && results.find((r) => r.noradId === held.noradId);
+
+  const lockOn = (entry) => {
+    const sinceMs = Date.now();
+    stickyPicks.set(key, { noradId: entry.noradId, sinceMs });
+    return { entry, sinceMs, switched: true };
+  };
+
+  // Nothing held yet, or what we held is no longer in the catalogue.
+  if (!current) return lockOn(leader);
+
+  // Someone else is now meaningfully closer.
+  if (leader.noradId !== current.noradId &&
+      leader.rangeKm < current.rangeKm - STICKY_MARGIN_KM) {
+    return lockOn(leader);
+  }
+
+  return { entry: current, sinceMs: held.sinceMs, switched: false };
+}
+
+// How many cards a mode puts on the board.
+function limitFor(mode, listLimit) {
+  return mode === 'iss' || mode === 'overhead' ? 1 : listLimit;
+}
 
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
@@ -56,6 +98,9 @@ async function computeClosest(lat, lon, altKm, limit, mode) {
 
   const observerGd = observerFrom(lat, lon, altKm);
   const satellites = await getSatellites(mode);
+  // Who is aboard the crewed stations. Cached hard inside the module, so
+  // this is a no-op on all but the first request every few hours.
+  await refreshCrew();
   const now = new Date();
   const gmst = satellite.gstime(now);
 
@@ -87,12 +132,26 @@ async function computeClosest(lat, lon, altKm, limit, mode) {
   }
 
   results.sort((a, b) => a.rangeKm - b.rangeKm);
-  const top = results.slice(0, limit);
+
+  // Every mode but "overhead" simply shows the nearest few, recomputed from
+  // scratch each poll. "overhead" instead stays locked on one object.
+  let top = results.slice(0, limit);
+  let heldSinceMs = null;
+  if (mode === 'overhead' && results.length > 0) {
+    const pick = stickyClosest(`${lat.toFixed(4)}|${lon.toFixed(4)}`, results);
+    top = [pick.entry];
+    heldSinceMs = pick.sinceMs;
+    if (pick.switched) {
+      console.log(`[overhead] now tracking ${pick.entry.name} at ${pick.entry.rangeKm} km`);
+    }
+  }
 
   // Decorate only what we're about to show — profile lookup is cheap, but
   // pass prediction is not, so it's limited to the headline satellite.
   const decorated = top.map((entry, index) => {
     const profile = profileFor(entry.name);
+    // Empty for everything that isn't a crewed station.
+    const crew = crewFactsFor(profile.id);
     const { ref, ...rest } = entry;
     const card = {
       ...rest,
@@ -101,11 +160,13 @@ async function computeClosest(lat, lon, altKm, limit, mode) {
       kind: profile.kind,
       emblem: profile.emblem,
       profileId: profile.id,
-      facts: profile.facts.concat([]),
-      fact: factFor(entry.name, Math.floor(Date.now() / 8000))
+      facts: profile.facts.concat(crew),
+      crew: crew.length > 0 ? crewNamesFor(profile.id) : undefined,
+      fact: factFor(entry.name, Math.floor(Date.now() / 8000), crew)
     };
     if (index === 0) {
       card.pass = cachedPass(ref, observerGd, `${ref.noradId}|${lat.toFixed(2)}|${lon.toFixed(2)}`);
+      if (heldSinceMs !== null) card.heldSinceMs = heldSinceMs;
     }
     return card;
   });
@@ -134,7 +195,7 @@ app.get('/api/closest', async (req, res) => {
   }
 
   try {
-    const limit = mode === 'iss' ? 1 : 6;
+    const limit = limitFor(mode, 6);
     const { satellites, totalTracked } = await computeClosest(lat, lon, altKm, limit, mode);
     res.json({ mode, totalTracked, observer: { lat, lon }, satellites });
   } catch (err) {
@@ -153,7 +214,7 @@ app.get('/api/leds', async (req, res) => {
   try {
     const { satellites } = await computeClosest(
       HOME_LOCATION.lat, HOME_LOCATION.lon, HOME_LOCATION.altKm,
-      mode === 'iss' ? 1 : 5, mode
+      limitFor(mode, 5), mode
     );
 
     if (satellites.length === 0) {
