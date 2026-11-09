@@ -1,25 +1,134 @@
 # Building the OrbitWall panel
 
-A 64x32 RGB LED matrix showing the satellite currently closest to your
-location. Total cost is roughly $60-90 depending on which parts you pick.
+An RGB LED matrix showing the satellite currently closest to your location.
 
 Read the [power safety](#power-safety) section before plugging anything in.
 
+## How many modules
+
+This is the decision to get right before you buy anything, because the
+answer is not two.
+
+HUB75 modules chain in a line. Two 64x32 modules give you **128x32** (side by
+side) or **64x64** (stacked) — neither is a geometry this firmware draws.
+The wide layout is 128x64, which is a 2x2 block of **four** modules.
+
+| Build | Modules | Pixels | Physical size | Sketch setting |
+|---|---|---|---|---|
+| **Two 64x64** | 2 | **128x64** | 384 x 192 mm at P3 | `OW_BUILD OW_DUAL64` |
+| Four 64x32 | 4 | 128x64 | 512 x 256 mm at P4 | `OW_BUILD OW_QUAD32` |
+| One 64x32 | 1 | 64x32 | 256 x 128 mm at P4 | `OW_BUILD OW_SINGLE` |
+| Two 64x32 | 2 | 128x32 or 64x64 | — | **not supported** |
+
+**Two 64x64 modules is the build to aim for.** They chain straight into
+128x64 with no coordinate remapping, so there is no chain order to get wrong,
+there are half as many power drops to run, and the whole thing costs less.
+The one catch is the scan rate — see [the E line](#the-e-line) below.
+
+Four 64x32 modules give the same resolution on a physically larger board, at
+the cost of the `VirtualMatrixPanel` remap described under
+[2x2 chaining](#2x2-chaining).
+
+### The E line
+
+This is the single thing most likely to cost you an evening.
+
+A module's **scan rate** sets how many address bits it needs:
+
+| Module | Scan | Address lines | E |
+|---|---|---|---|
+| 64x32 | 1/16 | A, B, C, D | not connected |
+| **64x64** | **1/32** | **A, B, C, D, E** | **must be wired** |
+
+1/16 scan multiplexes 16 row pairs, which four bits can address. 1/32 scan
+needs 32, so a fifth line. Leave E off a 64x64 module and it does not fail
+obviously — you get the top half of the image repeated down the panel,
+which reads as a firmware bug and is not one.
+
+The sketch sets `PIN_E` from `OW_BUILD`: GPIO 18 for `OW_DUAL64`, `-1` for
+the 64x32 builds. `npm test` checks that matrix resolves correctly.
+
+### If the panel stays dark
+
+Cheap 64x64 modules often use a driver chip that needs initialising before it
+will light at all, and listings almost never say which one. If you have
+already proven the wiring with the library's own `PatternPlasma` example and
+still get nothing, or get garbage, uncomment one of the `OW_PANEL_DRIVER`
+lines at the top of the sketch and reflash. `FM6126A` is the usual answer.
+
 ## Bill of materials
+
+Quantities below are for the recommended **two-module 64x64** build. For the
+four-module build take four 64x32 panels, four capacitors and a 5V 15A+
+supply; for a single module, one panel and a 5V 4A supply.
 
 | Part | Approx price | What to look for |
 |---|---|---|
-| 64x32 P4 (4mm pitch) indoor HUB75 RGB LED matrix panel, 1/16 scan | $25-35 | Search "P4 64x32 HUB75 LED matrix". The physical panel is about 256 x 128mm. Make sure the listing says **1/16 scan** and shows a 16-pin IDC connector. |
+| **2 x** 64x64 indoor HUB75 RGB LED matrix module, 1/32 scan | $9-25 each | Search "P3 64x64 HUB75 LED module". A P3 module is 192 x 192mm; P4 would be 256 x 256mm. Must say **1/32 scan** and have a 16-pin IDC header. Check the shipping cost separately — on AliExpress it can exceed the parts. |
 | ESP32 dev board (WROOM-32, sold as "ESP32 Dev Module" / "ESP32 DevKit V1") | $6-12 | Must be a **classic ESP32**. See [why not S3](#why-classic-esp32-and-not-s2s3c3). |
-| 5V 4A+ (20W+) switching power supply | $10-15 | Barrel jack is easiest. 4A is the panel's worst-case draw with every LED at full white. |
+| 5V **10A+** (50W+) switching power supply | $15-25 | See [power budget](#power-budget). Two 64x64 modules can pull around 8A between them at full white. A 4A supply is only enough for a single 64x32 module. |
 | ESP32-to-HUB75 adapter/driver shield | $15-25 | Strongly recommended. Search "ESP32 HUB75 adapter board" or use the open-source `rorosaurus/esp32-hub75-driver`. Saves wiring 14 jumpers by hand. |
-| 1000-2200uF, 35V+ electrolytic capacitor | ~$1 | Goes across the panel's 5V/GND input. Prevents flicker when the display jumps to a bright frame. |
+| 1000-2200uF, 35V+ electrolytic capacitor, **one per module** | ~$1 each | Goes across each module's 5V/GND input. Prevents flicker when the display jumps to a bright frame. |
+| HUB75 ribbon cable, 1 extra | ~$2 | To chain module to module. Each module ships with one; a 2-module chain needs 2 in total (4 for the quad build). |
+| Power pigtail, 1 extra | ~$2 | Every module is powered **in parallel from the PSU**, never daisy-chained through another module. |
 | DC barrel jack to screw-terminal adapter | ~$3 | For getting the PSU's 5V into the panel's power lead. |
 | Female-female Dupont jumpers, 16+ | ~$5 | **Only if you skip the adapter shield.** |
 | USB cable for the ESP32 | usually included | For flashing and serial monitoring. |
 
-Panels usually ship with a power cable (two spade/pigtail leads) and a 16-pin
-IDC ribbon cable. Check your listing — if not, buy them separately.
+Modules usually ship with a power cable (two spade/pigtail leads) and a
+16-pin IDC ribbon cable. Check your listing — if not, buy them separately.
+
+### Power budget
+
+Worst case is every LED at full white:
+
+| Build | Pixels | Rough worst case | Supply |
+|---|---|---|---|
+| One 64x32 | 2,048 | ~4A / 20W | 5V 4A |
+| **Two 64x64** | **8,192** | **~8A / 40W** | **5V 10A** |
+| Four 64x32 | 8,192 | ~16A / 80W | 5V 15-20A |
+
+The two 64x64 modules and the four 64x32 modules light the same 8,192 pixels,
+but the 64x32 modules are driven at 1/16 scan — twice as many rows lit at
+once — so they draw roughly twice the peak current for the same picture.
+
+In practice OrbitWall never approaches any of these: the layout is mostly
+dark and the firmware ships at `BRIGHTNESS 100` of 255. Expect **1-3A** for
+the two-module board in normal use. Size for the worst case anyway — a
+browned-out HUB75 panel does not fail gracefully, it shows garbage or
+flickers, and you will waste an evening blaming the firmware.
+
+### 2x2 chaining
+
+The four modules are wired as **one chain of four**, not as two chains:
+
+```
+   PSU 5V/GND  ->  all four modules, in parallel
+
+   ESP32 -> [1 IN]--[1 OUT] -> [2 IN]--[2 OUT]
+                                           |
+            [4 OUT]--[4 IN] <- [3 OUT]--[3 IN]
+```
+
+The library sees a 256x32 strip; `VirtualMatrixPanel` folds it into the
+128x64 the renderer draws on. Which fold is correct depends on how you
+physically arranged the modules, and it is genuinely hard to predict — so
+don't.
+
+**Hold the BOOT button while powering up.** The sketch draws a numbered,
+coloured border in each quadrant:
+
+```
++---------+---------+
+|    1    |    2    |
++---------+---------+
+|    3    |    4    |
++---------+---------+
+```
+
+If they appear in that order, `OW_CHAIN_TYPE` is right. If not, try the other
+values listed next to the `#define` in the sketch until they do. This takes
+about a minute and saves guessing from a scrambled display.
 
 ### Avoid this specific panel
 
@@ -39,10 +148,15 @@ well-tested target. Buy the older chip on purpose.
 
 ## Power safety
 
-**The panel does not get its power from the ESP32.** At full brightness a
-64x32 panel can pull 4 amps; the ESP32's onboard regulator supplies a few
-hundred milliamps. Wiring the panel to the ESP32's 5V pin will brown out the
-board, and can damage the regulator.
+**The panels do not get their power from the ESP32.** At full brightness one
+module can pull 4 amps — a full board, 8 to 16 — while the ESP32's onboard
+regulator supplies a few hundred milliamps. Wiring a panel to the ESP32's 5V
+pin will brown out the board, and can damage the regulator.
+
+**Power each module directly from the PSU, in parallel.** Do not feed module
+2 from module 1's output terminals: the trace and connector are not rated for
+the combined current, and the voltage drop across a chained pair is enough to
+make the far module dim and unstable.
 
 Correct wiring:
 
@@ -84,14 +198,21 @@ Hand-wiring, using the library's default pinout:
 | B | row address bit 1 | 19 |
 | C | row address bit 2 | 5 |
 | D | row address bit 3 | 17 |
-| E | row address bit 4 | not connected |
+| E | row address bit 4 | **18** on a 64x64 module; not connected on 64x32 |
 | CLK | shift clock | 16 |
 | LAT (STB) | latch | 4 |
 | OE | output enable | 15 |
 | GND (4 pins) | ground | any ESP32 GND |
 
-E is unused because a 1/16-scan 64x32 panel only needs 4 address bits. Leave
-it unconnected.
+On a 1/16-scan 64x32 module, E is unused: A-D address 16 row pairs = 32
+rows. Leave it unconnected. That stays true for the four-module build —
+chaining adds width, not rows, so the scan rate is unchanged.
+
+On a 1/32-scan 64x64 module, **E must be wired to GPIO 18**. See
+[the E line](#the-e-line).
+
+Only the **first** module in the chain connects to the ESP32. The rest are
+fed by ribbon from the previous module's OUT connector.
 
 GPIO12 is a strapping pin (MTDI) on the ESP32 — it is read at boot to set
 flash voltage. Driving it as an output after boot is fine, which is what the

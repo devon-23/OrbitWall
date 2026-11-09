@@ -10,7 +10,9 @@ There are three parts:
   works out which satellites are closest to you right now, predicts the next
   pass, and serves it over a small HTTP API.
 - **The panel** (`firmware/`, `docs/`) — an RGB LED matrix driven by an ESP32
-  that polls the server over WiFi and draws the display.
+  that polls the server over WiFi and draws the display. It renders from the
+  same layout code as the preview, and `npm test` diffs the two pixel for
+  pixel.
 - **The preview** (`public/`) — a web page that simulates the panel pixel for
   pixel, so you can see what the wall unit will look like before (or without)
   building it.
@@ -64,13 +66,24 @@ The board supports two geometries, and it matters:
 | **128 x 64** | 21 | 8 | Emblem + three identity lines + full-width telemetry. Only a long name scrolls. |
 | 64 x 32 | 10 | 4 | Two short lines and a scrolling bottom row. |
 
-**Get the 128 x 64 panel.** A line like `Alt:417km Spd:27.6k` is 19
-characters; on a 64 x 32 board only 10 fit, which is why the old layout had to
-scroll everything. Toggle between the two in the preview to see the
-difference before you spend anything.
+**Get the 128 x 64 board.** A line like `Alt:417km Spd:27.6k` is 19
+characters; on a 64 x 32 board only 10 fit, which is why the compact layout
+has to scroll. Toggle between the two in the preview to see the difference
+before you spend anything.
 
-A 128x64 HUB75 panel is roughly $35-55, about the same as the 64x32 — the
-cost difference is negligible. Two chained 64x64 panels also work.
+**128x64 is built from several modules, and the count depends on which.**
+HUB75 modules chain in a line, so two 64x32s give 128x32 or 64x64 — neither
+is a layout this firmware draws.
+
+| Build | Gets you | Notes |
+|---|---|---|
+| **two 64x64 modules** | 128x64 | Simplest. Needs the E address line wired. |
+| four 64x32 modules | 128x64 | Larger board, needs a 2x2 coordinate remap. |
+| one 64x32 module | 64x32 | The compact layout. |
+
+Set `OW_BUILD` at the top of the sketch to match. Modules run $9-25 each.
+Power budget, the E-line trap and how to get the chain order right are all in
+**[docs/HARDWARE.md](docs/HARDWARE.md)**.
 
 ## Quick start — the hardware
 
@@ -111,7 +124,16 @@ For the crewed stations the card carries a `crew` array of full names, and the
 rotating `fact` line cycles through them one at a time (see below).
 
 **`GET /api/leds?mode=`** — trimmed payload for the ESP32. Short keys keep
-parsing cheap on a microcontroller.
+parsing cheap on a microcontroller; a five-satellite response is about 1.1 KB.
+Every card carries the full field set (`n` name, `l` label, `o` operator,
+`k` kind, `e` emblem, `t` type, `c` colour, `el`/`az` look angles, `r` range,
+`a` altitude, `sp` speed, `f` fact), because the wide layout draws telemetry
+for whichever satellite is on screen rather than only the headline one.
+
+The headline card also carries `p`: **milliseconds until the next pass**, not
+an absolute timestamp, because the ESP32 has no clock to compare one against.
+It counts down from there with `millis()`. `npm test` checks that the keys
+the sketch reads and the keys this endpoint sends are the same set.
 
 ## How it works
 
@@ -172,8 +194,28 @@ npm test
 ```
 
 Checks the things that silently break a fixed-size display: text that would
-overflow the panel, ragged emblem art, characters the font can't draw, and
-layout regions that render empty.
+overflow the panel, ragged emblem art, characters the font can't draw, layout
+regions that render empty, and a scrolling name sliding over the emblem.
+
+It also checks the two things that span languages, where a mistake shows up
+only on the physical wall:
+
+- **Renderer parity.** Compiles the ESP32's drawing code with the host C++
+  compiler and diffs its framebuffer against the browser's, across both panel
+  geometries and every animation state. Skipped with a warning if no compiler
+  is installed.
+- **API field names.** The sketch reads `o["sp"]`; the server sends `sp`.
+  Nothing links those, so both sides are parsed and compared.
+- **Panel geometry.** The sketch's `OW_BUILD` matrix is preprocessed for
+  every supported panel arrangement and checked against the resolution, chain
+  length and address pins each one should produce.
+
+If you change the font, the emblems or the type colours, regenerate the
+firmware's copy of them:
+
+```bash
+npm run gen:firmware
+```
 
 ## Notes
 

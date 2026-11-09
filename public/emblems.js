@@ -22,7 +22,7 @@ const PALETTE = {
   N: [30, 60, 140]    // deep blue
 };
 
-const EMBLEMS = {
+export const EMBLEMS = {
   // International Space Station: long truss, four gold array pairs, modules.
   iss: [
     '........................',

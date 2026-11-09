@@ -5,7 +5,8 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node scripts/check.mjs"
+    "test": "node scripts/check.mjs",
+    "gen:firmware": "node scripts/gen-firmware-assets.mjs"
   },
   "engines": {
     "node": ">=18"

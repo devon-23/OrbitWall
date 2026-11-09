@@ -151,18 +151,41 @@ differ in which one: `iss` is always the station, while `overhead` is whichever
 object is closest right now, held until another overtakes it (see
 `stickyClosest()` in `server/server.js`).
 
-## Renderer status
+## Renderer parity
 
-The two renderers are **not** currently at parity, and the layout above
-describes the wide board that only one of them implements:
+Both renderers implement both layouts, and that is enforced rather than
+hoped for:
 
-| Renderer | Implements |
+| Renderer | File |
 |---|---|
-| `public/panel.js` | both the wide (128x64) and compact (64x32) layouts |
-| `firmware/orbitwall_esp32/orbitwall_esp32.ino` | compact (64x32) only |
+| Browser preview | `public/panel.js` |
+| ESP32 panel | `firmware/orbitwall_esp32/panel_draw.h` |
 
-The sketch is still hard-coded to `PANEL_WIDTH 64` / `PANEL_HEIGHT 32` and
-draws the older three-region layout (horizon strip, scrolling name, one stat
-at a time cycling through range / speed / elevation). It has no `Alt:`/`Spd:`
-row, so the split alignment above does not apply to it yet. Porting the sketch
-to the wide layout is the outstanding piece of work here.
+`panel_draw.h` is deliberately free of Arduino types — pixels leave it only
+through an `OwCanvas::plot` callback — so the same code compiles on a
+desktop. `scripts/parity-check.mjs` does exactly that: it builds the header
+with the host compiler, renders a spread of cards through both renderers and
+diffs the framebuffers pixel for pixel. `npm test` runs it, and it is
+sensitive enough to catch a one-pixel row shift.
+
+If no C++ compiler is on `PATH` the parity check is skipped with a warning
+rather than failing, so `npm test` still works without one.
+
+The font, the emblem art and the type colours are **generated**, not
+transcribed: `scripts/gen-firmware-assets.mjs` writes
+`firmware/orbitwall_esp32/panel_assets.h` from `public/font.js`,
+`public/emblems.js`, `public/panel.js` and `server/satType.js`. The Arduino
+IDE has no build step that could do this, so the header is committed, and
+`npm test` fails if it is stale. After changing any of those four files:
+
+```bash
+npm run gen:firmware
+```
+
+### Changing the layout
+
+1. Edit this document.
+2. Edit `public/panel.js`.
+3. Edit `firmware/orbitwall_esp32/panel_draw.h` to match.
+4. `npm test` — the parity check tells you precisely which row and column
+   still disagree.

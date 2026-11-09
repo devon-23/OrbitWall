@@ -186,9 +186,60 @@ for (const off of [1, 17, 64, 155]) {
   }
 }
 
+// 8. The sketch and /api/leds must agree on field names. They are written in
+//    different languages and nothing links them, so a renamed key is a
+//    silent blank on the wall panel and nowhere else.
+import { readFileSync } from 'node:fs';
+
+const inoText = readFileSync(new URL('../firmware/orbitwall_esp32/orbitwall_esp32.ino', import.meta.url), 'utf8');
+const serverText = readFileSync(new URL('../server/server.js', import.meta.url), 'utf8');
+
+const sketchReads = new Set([...inoText.matchAll(/o\["([a-z]+)"\]/g)].map((m) => m[1]));
+const cardBlock = serverText.match(/const card = \(s\) => \(\{([\s\S]*?)\}\);/);
+if (!cardBlock) {
+  fail('could not find the card() helper in server/server.js - has /api/leds been restructured?');
+} else {
+  const sent = new Set([...cardBlock[1].matchAll(/^\s{6}([a-z]+):/gm)].map((m) => m[1]));
+  // `p` is added alongside the spread, only for the headline satellite.
+  if (/\bp: closest\.pass/.test(serverText)) sent.add('p');
+
+  for (const key of sketchReads) {
+    if (!sent.has(key)) fail(`the sketch reads o["${key}"] but /api/leds never sends it`);
+  }
+  for (const key of sent) {
+    if (!sketchReads.has(key)) fail(`/api/leds sends "${key}" but the sketch never reads it`);
+  }
+}
+
+// 9. The firmware's generated asset header must be current. The Arduino IDE
+//    has no build step that would regenerate it, so a stale committed header
+//    means the wall panel ships the old font or the old emblems.
+const { headerIsCurrent } = await import('./gen-firmware-assets.mjs');
+if (!headerIsCurrent()) {
+  fail('firmware/orbitwall_esp32/panel_assets.h is out of date \u2014 run `npm run gen:firmware`');
+}
+
+// 10. The sketch's OW_BUILD matrix must resolve to the right geometry for
+//     every supported panel arrangement.
+const { checkGeometry } = await import('./check-geometry.mjs');
+const geometry = checkGeometry();
+if (geometry.skipped) console.warn(`note: panel geometry not checked \u2014 ${geometry.skipped}`);
+else for (const f of geometry.failures) fail(f);
+
+// 11. The two renderers must draw the same pixels. This compiles the ESP32's
+//    drawing code on this machine and diffs it against public/panel.js.
+const { runParity } = await import('./parity-check.mjs');
+const parity = runParity();
+if (parity.skipped) {
+  console.warn(`note: renderer parity not checked \u2014 ${parity.skipped}`);
+} else {
+  for (const f of parity.failures) fail(f);
+}
+
 if (failures.length) {
   console.error(`FAIL — ${failures.length} problem(s):`);
   for (const f of failures) console.error('  - ' + f);
   process.exit(1);
 }
-console.log('OK — emblems, fonts, text fit and layout bands all check out.');
+const parityNote = parity.skipped ? '' : `, ${parity.checked} frames identical in both renderers`;
+console.log(`OK — emblems, fonts, text fit and layout bands all check out${parityNote}.`);

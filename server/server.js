@@ -223,24 +223,34 @@ app.get('/api/leds', async (req, res) => {
 
     const [closest, ...rest] = satellites;
 
+    // Every card gets the full field set: the wide layout draws altitude,
+    // speed and look angles for whichever satellite is on screen, not just
+    // the headline one.
+    const card = (s) => ({
+      n: s.name,
+      l: s.label,
+      o: s.operator,
+      k: s.kind,
+      e: s.emblem,
+      t: s.type,
+      c: s.color,
+      el: s.elevationDeg,
+      az: s.azimuthDeg,
+      r: s.rangeKm,
+      a: s.altitudeKm,
+      sp: s.speedKmh,
+      f: s.fact
+    });
+
     res.json({
       mode,
       closest: {
-        n: closest.name,
-        l: closest.label,
-        o: closest.operator,
-        k: closest.kind,
-        e: closest.emblem,
-        t: closest.type,
-        el: closest.elevationDeg,
-        az: closest.azimuthDeg,
-        r: closest.rangeKm,
-        a: closest.altitudeKm,
-        sp: closest.speedKmh,
-        f: closest.fact,
-        p: closest.pass ? closest.pass.startMs : null
+        ...card(closest),
+        // Milliseconds from now, not an absolute timestamp: the ESP32 has no
+        // clock to compare one against. It counts this down with millis().
+        p: closest.pass ? closest.pass.startMs - Date.now() : null
       },
-      next: rest.map((s) => ({ n: s.name, l: s.label, e: s.emblem, t: s.type, r: s.rangeKm, f: s.fact })),
+      next: rest.map(card),
       ts: Date.now()
     });
   } catch (err) {
